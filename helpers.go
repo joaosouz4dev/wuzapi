@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -11,7 +12,9 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 )
@@ -43,6 +46,15 @@ func callHook(myurl string, payload map[string]string, id string) {
 	}
 
 	client := clientManager.GetHTTPClient(id)
+
+	// If no HTTP client exists for this userID, create a default one
+	if client == nil {
+		log.Warn().Str("userID", id).Msg("No HTTP client found, creating default client")
+		client = resty.New()
+		client.SetTimeout(30 * time.Second)
+		client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+		clientManager.SetHTTPClient(id, client)
+	}
 
 	format := os.Getenv("WEBHOOK_FORMAT")
 	if format == "json" {
@@ -79,6 +91,15 @@ func callHookFile(myurl string, payload map[string]string, id string, file strin
 	log.Info().Str("file", file).Str("url", myurl).Msg("Sending POST")
 
 	client := clientManager.GetHTTPClient(id)
+
+	// If no HTTP client exists for this userID, create a default one
+	if client == nil {
+		log.Warn().Str("userID", id).Msg("No HTTP client found, creating default client")
+		client = resty.New()
+		client.SetTimeout(30 * time.Second)
+		client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
+		clientManager.SetHTTPClient(id, client)
+	}
 
 	// Create final payload map
 	finalPayload := make(map[string]string)
@@ -123,9 +144,11 @@ func ProcessOutgoingMedia(userID string, contactJID string, messageID string, da
 		Enabled       bool   `db:"s3_enabled"`
 		MediaDelivery string `db:"media_delivery"`
 	}
+
+	// Use explicit column selection to avoid column count mismatch
 	err := db.Get(&s3Config, "SELECT s3_enabled, media_delivery FROM users WHERE id = $1", userID)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get S3 config")
+		log.Error().Err(err).Str("userID", userID).Msg("Failed to get S3 config")
 		s3Config.Enabled = false
 		s3Config.MediaDelivery = "base64"
 	}

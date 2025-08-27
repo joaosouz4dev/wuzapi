@@ -728,7 +728,22 @@ func (s *server) GetStatus() http.HandlerFunc {
 		var s3Endpoint, s3Region, s3Bucket, s3AccessKey, s3PublicURL, s3MediaDelivery string
 		var s3PathStyle bool
 		var s3RetentionDays int
-		s.db.QueryRow(`SELECT s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_path_style, s3_public_url, media_delivery, s3_retention_days FROM users WHERE id = $1`, txtid).Scan(&s3Enabled, &s3Endpoint, &s3Region, &s3Bucket, &s3AccessKey, &s3PathStyle, &s3PublicURL, &s3MediaDelivery, &s3RetentionDays)
+
+		// Use explicit column selection to avoid column count mismatch
+		err := s.db.QueryRow(`SELECT s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_path_style, s3_public_url, media_delivery, s3_retention_days FROM users WHERE id = $1`, txtid).Scan(&s3Enabled, &s3Endpoint, &s3Region, &s3Bucket, &s3AccessKey, &s3PathStyle, &s3PublicURL, &s3MediaDelivery, &s3RetentionDays)
+		if err != nil {
+			log.Error().Err(err).Str("userID", txtid).Msg("Failed to get S3 config")
+			// Set default values if S3 config cannot be retrieved
+			s3Enabled = false
+			s3Endpoint = ""
+			s3Region = ""
+			s3Bucket = ""
+			s3AccessKey = ""
+			s3PublicURL = ""
+			s3MediaDelivery = "base64"
+			s3PathStyle = false
+			s3RetentionDays = 30
+		}
 		s3Config := map[string]interface{}{
 			"enabled":        s3Enabled,
 			"endpoint":       s3Endpoint,
@@ -4376,6 +4391,8 @@ func (s *server) ListUsers() http.HandlerFunc {
 			var s3Endpoint, s3Region, s3Bucket, s3AccessKey, s3PublicURL, s3MediaDelivery string
 			var s3PathStyle bool
 			var s3RetentionDays int
+
+			// Use explicit column selection to avoid column count mismatch
 			err = s.db.QueryRow(`SELECT s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_path_style, s3_public_url, media_delivery, s3_retention_days FROM users WHERE id = $1`, user.Id).Scan(&s3Enabled, &s3Endpoint, &s3Region, &s3Bucket, &s3AccessKey, &s3PathStyle, &s3PublicURL, &s3MediaDelivery, &s3RetentionDays)
 			if err == nil {
 				userMap["s3_config"] = map[string]interface{}{
@@ -4707,6 +4724,8 @@ func (s *server) DeleteUserComplete() http.HandlerFunc {
 
 		// 5. Remove files from S3 (if enabled)
 		var s3Enabled bool
+
+		// Use explicit column selection to avoid column count mismatch
 		err = s.db.QueryRow("SELECT s3_enabled FROM users WHERE id = $1", id).Scan(&s3Enabled)
 		if err == nil && s3Enabled {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

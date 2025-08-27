@@ -391,7 +391,7 @@ func sqliteChangeIDType(tx *sqlx.Tx) error {
 	columnList := strings.Join(filteredColumns, ", ")
 	if _, err = tx.Exec(fmt.Sprintf(`
         INSERT INTO users_new (id, %s)
-        SELECT gen_random_uuid(), %s FROM users`,
+        SELECT hex(randomblob(16)), %s FROM users`,
 		columnList, columnList)); err != nil {
 		return fmt.Errorf("failed to copy data: %w", err)
 	}

@@ -201,6 +201,7 @@ func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userI
 
 // Connects to Whatsapp Websocket on server startup if last state was connected
 func (s *server) connectOnStartup() {
+	// Use explicit column selection to avoid column count mismatch
 	rows, err := s.db.Queryx("SELECT id,name,token,jid,webhook,events,proxy_url,CASE WHEN s3_enabled THEN 'true' ELSE 'false' END AS s3_enabled,media_delivery FROM users WHERE connected=1")
 	if err != nil {
 		log.Error().Err(err).Msg("DB Problem")
@@ -260,6 +261,12 @@ func (s *server) connectOnStartup() {
 
 			// Initialize S3 client if configured
 			go func(userID string) {
+				// Validate userID before proceeding
+				if userID == "" {
+					log.Warn().Msg("Empty userID, skipping S3 client initialization")
+					return
+				}
+
 				var s3Config struct {
 					Enabled       bool   `db:"s3_enabled"`
 					Endpoint      string `db:"s3_endpoint"`
@@ -272,6 +279,7 @@ func (s *server) connectOnStartup() {
 					RetentionDays int    `db:"s3_retention_days"`
 				}
 
+				// Use explicit column selection to avoid column count mismatch
 				err := s.db.Get(&s3Config, `
 					SELECT s3_enabled, s3_endpoint, s3_region, s3_bucket, 
 						   s3_access_key, s3_secret_key, s3_path_style, 
