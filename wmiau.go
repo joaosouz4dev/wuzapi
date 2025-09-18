@@ -605,7 +605,6 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		log.Info().Msg("Received StreamReplaced event")
 		return
 	case *events.Message:
-
 		var s3Config struct {
 			Enabled       string `db:"s3_enabled"`
 			MediaDelivery string `db:"media_delivery"`
@@ -989,7 +988,6 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 				}
 			}
 		}
-
 	case *events.Receipt:
 		postmap["type"] = "ReadReceipt"
 		dowebhook = 1
@@ -1028,6 +1026,8 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		postmap["type"] = "HistorySync"
 		dowebhook = 1
 	case *events.AppState:
+		postmap["type"] = "AppState"
+		dowebhook = 1
 		log.Info().Str("index", fmt.Sprintf("%+v", evt.Index)).Str("actionValue", fmt.Sprintf("%+v", evt.SyncActionValue)).Msg("App state event received")
 	case *events.LoggedOut:
 		postmap["type"] = "Logged Out"
@@ -1045,14 +1045,24 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 		dowebhook = 1
 		log.Info().Str("state", fmt.Sprintf("%s", evt.State)).Str("media", fmt.Sprintf("%s", evt.Media)).Str("chat", evt.MessageSource.Chat.String()).Str("sender", evt.MessageSource.Sender.String()).Msg("Chat Presence received")
 	case *events.CallOffer:
+		postmap["type"] = "CallOffer"
+		dowebhook = 1
 		log.Info().Str("event", fmt.Sprintf("%+v", evt)).Msg("Got call offer")
 	case *events.CallAccept:
+		postmap["type"] = "CallAccept"
+		dowebhook = 1
 		log.Info().Str("event", fmt.Sprintf("%+v", evt)).Msg("Got call accept")
 	case *events.CallTerminate:
+		postmap["type"] = "CallTerminate"
+		dowebhook = 1
 		log.Info().Str("event", fmt.Sprintf("%+v", evt)).Msg("Got call terminate")
 	case *events.CallOfferNotice:
+		postmap["type"] = "CallOfferNotice"
+		dowebhook = 1
 		log.Info().Str("event", fmt.Sprintf("%+v", evt)).Msg("Got call offer notice")
 	case *events.CallRelayLatency:
+		postmap["type"] = "CallRelayLatency"
+		dowebhook = 1
 		log.Info().Str("event", fmt.Sprintf("%+v", evt)).Msg("Got call relay latency")
 	case *events.Disconnected:
 		postmap["type"] = "Disconnected"
