@@ -3379,7 +3379,7 @@ func (s *server) ListGroups() http.HandlerFunc {
 			return
 		}
 
-		resp, err := clientManager.GetWhatsmeowClient(txtid).GetJoinedGroups()
+		resp, err := clientManager.GetWhatsmeowClient(txtid).GetJoinedGroups(context.Background())
 
 		if err != nil {
 			msg := fmt.Sprintf("failed to get group list: %v", err)
@@ -3620,7 +3620,7 @@ func (s *server) CreateGroup() http.HandlerFunc {
 			Participants: participantJIDs,
 		}
 
-		groupInfo, err := clientManager.GetWhatsmeowClient(txtid).CreateGroup(req)
+		groupInfo, err := clientManager.GetWhatsmeowClient(txtid).CreateGroup(context.Background(), req)
 
 		if err != nil {
 			log.Error().Str("error", fmt.Sprintf("%v", err)).Msg("failed to create group")
