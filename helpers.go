@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -39,36 +38,6 @@ func isHTTPURL(input string) bool {
 		return false
 	}
 	return parsed.Host != ""
-}
-
-func fetchURLBytes(resourceURL string) ([]byte, string, error) {
-	req, err := http.NewRequest("GET", resourceURL, nil)
-	if err != nil {
-		return nil, "", err
-	}
-
-	resp, err := globalHTTPClient.Do(req)
-	if err != nil {
-		return nil, "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, "", fmt.Errorf("unexpected status code %d", resp.StatusCode)
-	}
-
-	limitedBody := http.MaxBytesReader(nil, resp.Body, 10*1024*1024)
-	data, err := io.ReadAll(limitedBody)
-	if err != nil {
-		return nil, "", err
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = http.DetectContentType(data)
-	}
-
-	return data, contentType, nil
 }
 
 // Update entry in User map

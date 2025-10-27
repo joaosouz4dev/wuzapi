@@ -26,10 +26,8 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/vincent-petithory/dataurl"
 	"go.mau.fi/whatsmeow"
-
 	"go.mau.fi/whatsmeow/proto/waCommon"
 	"go.mau.fi/whatsmeow/proto/waE2E"
-
 	"go.mau.fi/whatsmeow/types"
 	"google.golang.org/protobuf/proto"
 )
@@ -40,18 +38,6 @@ type Values struct {
 
 func (v Values) Get(key string) string {
 	return v.m[key]
-}
-
-// isHTTPURL checks if the input is an http(s) URL
-func isHTTPURL(input string) bool {
-	parsed, err := url.ParseRequestURI(input)
-	if err != nil {
-		return false
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return false
-	}
-	return parsed.Host != ""
 }
 
 // fetchURLBytes downloads the content from a URL and returns its bytes and Content-Type
@@ -1277,36 +1263,6 @@ func (s *server) SendImage() http.HandlerFunc {
 		uploaded, err = clientManager.GetWhatsmeowClient(txtid).Upload(context.Background(), filedata, whatsmeow.MediaImage)
 		if err != nil {
 			s.Respond(w, r, http.StatusInternalServerError, errors.New(fmt.Sprintf("failed to upload file: %v", err)))
-			return
-		}
-
-		// decode jpeg into image.Image
-		reader := bytes.NewReader(filedata)
-		img, _, err := image.Decode(reader)
-		if err != nil {
-			s.Respond(w, r, http.StatusInternalServerError, errors.New(fmt.Sprintf("could not decode image for thumbnail preparation: %v", err)))
-			return
-		}
-
-		// resize to width 72 using Lanczos resampling and preserve aspect ratio
-		m := resize.Thumbnail(72, 72, img, resize.Lanczos3)
-
-		tmpFile, err := os.CreateTemp("", "resized-*.jpg")
-		if err != nil {
-			s.Respond(w, r, http.StatusInternalServerError, errors.New(fmt.Sprintf("Could not create temp file for thumbnail: %v", err)))
-			return
-		}
-		defer tmpFile.Close()
-
-		// write new image to file
-		if err := jpeg.Encode(tmpFile, m, nil); err != nil {
-			s.Respond(w, r, http.StatusInternalServerError, errors.New(fmt.Sprintf("Failed to encode jpeg: %v", err)))
-			return
-		}
-
-		thumbnailBytes, err = os.ReadFile(tmpFile.Name())
-		if err != nil {
-			s.Respond(w, r, http.StatusInternalServerError, errors.New(fmt.Sprintf("Failed to read %s: %v", tmpFile.Name(), err)))
 			return
 		}
 
