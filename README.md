@@ -57,6 +57,7 @@ you can use to alter behaviour
 * -osname : Connection OS Name in Whatsapp
 * -skipmedia : Skip downloading media from messages
 * -wadebug : enable whatsmeow debug, either INFO or DEBUG levels are suported
+
 * -sslcertificate : SSL Certificate File
 * -sslprivatekey : SSL Private Key File
 
@@ -80,26 +81,40 @@ Set `TZ=America/New_York ./wuzapi ...` in your shell or in your .env file or Doc
 
 ## Configuration
 
-WuzAPI uses a <code>.env</code> file for configuration. Here are the required settings:
+WuzAPI uses a `.env` file for configuration. You can use the provided `.env.sample` as a template:
 
-### For PostgreSQL
+```bash
+cp .env.sample .env
+```
+
+### Environment Variables
+
+#### Required Settings
 ```
 WUZAPI_ADMIN_TOKEN=your_admin_token_here
+```
+
+#### Database Configuration
+
+**For PostgreSQL:**
+```
 DB_USER=wuzapi
 DB_PASSWORD=wuzapi
 DB_NAME=wuzapi
-DB_HOST=localhost
+DB_HOST=db  # Use 'db' when running with Docker Compose, or 'localhost' for native execution
 DB_PORT=5432
 DB_SSLMODE=false
-TZ=America/New_York
-WEBHOOK_FORMAT=json # or "form" for the default
-SESSION_DEVICE_NAME=WuzAPI
 ```
 
-### For SQLite
+**For SQLite (default):**
+No database configuration needed - SQLite is used by default if no PostgreSQL settings are provided.
+
+#### Optional Settings
 ```
-WUZAPI_ADMIN_TOKEN=your_admin_token_here
 TZ=America/New_York
+WEBHOOK_FORMAT=json  # or "form" for the default
+SESSION_DEVICE_NAME=WuzAPI
+WUZAPI_PORT=8080     # Port for the WuzAPI server
 ```
 
 ### RabbitMQ Integration
@@ -125,6 +140,22 @@ When enabled:
 * TZ: Optional - Timezone for server operations (default: UTC)
 * PostgreSQL-specific options: Only required when using PostgreSQL backend
 * RabbitMQ options: Optional, only required if you want to publish events to RabbitMQ
+
+### Docker Configuration
+
+When using Docker Compose, `docker-compose.yml` automatically loads environment variables from a `.env` file when available. However, `docker-compose-swarm.yaml` uses `docker stack deploy`, which does not automatically load from `.env` files. Variables in the swarm file will only be substituted if they are exported in the shell environment where the deploy command is run. For managing secrets in Swarm, consider using Docker secrets.
+
+The Docker configuration will:
+1. First load variables from the `.env` file (if present and supported)
+2. Use default values as fallback if variables are not defined
+3. Override with any variables explicitly set in the `environment` section of the compose file
+
+**Key differences for Docker deployment:**
+- Set `DB_HOST=db` instead of `localhost` to connect to the PostgreSQL container
+- The `WUZAPI_PORT` variable controls the external port mapping in `docker-compose.yml`
+- In swarm mode, `WUZAPI_PORT` configures the Traefik load balancer port
+
+**Note:** The `.env` file is already included in `.gitignore` to avoid committing sensitive information to your repository.
 
 ## Usage
 
@@ -210,17 +241,17 @@ Check the [API Reference](https://github.com/asternic/wuzapi/blob/main/API.md)
 <table>
 <tr>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
-        <a href=https://github.com/guilhermejansen>
-            <img src=https://avatars.githubusercontent.com/u/52773109?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Guilherme Jansen/>
-            <br />
-            <sub style="font-size:14px"><b>Guilherme Jansen</b></sub>
-        </a>
-    </td>
-    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
         <a href=https://github.com/asternic>
             <img src=https://avatars.githubusercontent.com/u/25182694?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Nicolas/>
             <br />
             <sub style="font-size:14px"><b>Nicolas</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/guilhermejansen>
+            <img src=https://avatars.githubusercontent.com/u/52773109?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Guilherme Jansen/>
+            <br />
+            <sub style="font-size:14px"><b>Guilherme Jansen</b></sub>
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
@@ -231,10 +262,10 @@ Check the [API Reference](https://github.com/asternic/wuzapi/blob/main/API.md)
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
-        <a href=https://github.com/pedroafonso18>
-            <img src=https://avatars.githubusercontent.com/u/157052926?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Pedro Afonso/>
+        <a href=https://github.com/luizrgf2>
+            <img src=https://avatars.githubusercontent.com/u/71092163?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Luiz Ricardo Gonçalves Felipe/>
             <br />
-            <sub style="font-size:14px"><b>Pedro Afonso</b></sub>
+            <sub style="font-size:14px"><b>Luiz Ricardo Gonçalves Felipe</b></sub>
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
@@ -245,14 +276,28 @@ Check the [API Reference](https://github.com/asternic/wuzapi/blob/main/API.md)
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
-        <a href=https://github.com/luizrgf2>
-            <img src=https://avatars.githubusercontent.com/u/71092163?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Luiz Ricardo Gonçalves Felipe/>
+        <a href=https://github.com/pedroafonso18>
+            <img src=https://avatars.githubusercontent.com/u/157052926?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Pedro Afonso/>
             <br />
-            <sub style="font-size:14px"><b>Luiz Ricardo Gonçalves Felipe</b></sub>
+            <sub style="font-size:14px"><b>Pedro Afonso</b></sub>
         </a>
     </td>
 </tr>
 <tr>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/chrsmendes>
+            <img src=https://avatars.githubusercontent.com/u/77082167?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Christopher Mendes/>
+            <br />
+            <sub style="font-size:14px"><b>Christopher Mendes</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/vitorsilvalima>
+            <img src=https://avatars.githubusercontent.com/u/9752658?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Vitor Silva Lima/>
+            <br />
+            <sub style="font-size:14px"><b>Vitor Silva Lima</b></sub>
+        </a>
+    </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
         <a href=https://github.com/andreydruz>
             <img src=https://avatars.githubusercontent.com/u/976438?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=andreydruz/>
@@ -261,31 +306,61 @@ Check the [API Reference](https://github.com/asternic/wuzapi/blob/main/API.md)
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
-        <a href=https://github.com/DwiRizqiH>
-            <img src=https://avatars.githubusercontent.com/u/69355492?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Ahmad Dwi Rizqi Hidayatulloh/>
+        <a href=https://github.com/ramon-victor>
+            <img src=https://avatars.githubusercontent.com/u/13617054?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=ramon-victor/>
             <br />
-            <sub style="font-size:14px"><b>Ahmad Dwi Rizqi Hidayatulloh</b></sub>
+            <sub style="font-size:14px"><b>ramon-victor</b></sub>
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
-        <a href=https://github.com/elohmeier>
-            <img src=https://avatars.githubusercontent.com/u/2536303?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=elohmeier/>
+        <a href=https://github.com/luiis716>
+            <img src=https://avatars.githubusercontent.com/u/97978347?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=luiis716/>
             <br />
-            <sub style="font-size:14px"><b>elohmeier</b></sub>
+            <sub style="font-size:14px"><b>luiis716</b></sub>
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
-        <a href=https://github.com/fadlee>
-            <img src=https://avatars.githubusercontent.com/u/334797?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Fadlul Alim/>
+        <a href=https://github.com/joaosouz4dev>
+            <img src=https://avatars.githubusercontent.com/u/47183663?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=João Victor Souza/>
             <br />
-            <sub style="font-size:14px"><b>Fadlul Alim</b></sub>
+            <sub style="font-size:14px"><b>João Victor Souza</b></sub>
+        </a>
+    </td>
+</tr>
+<tr>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/gusnips>
+            <img src=https://avatars.githubusercontent.com/u/981265?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Gustavo Salomé />
+            <br />
+            <sub style="font-size:14px"><b>Gustavo Salomé </b></sub>
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
-        <a href=https://github.com/ruben18salazar3>
-            <img src=https://avatars.githubusercontent.com/u/86245508?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Rubén Salazar/>
+        <a href=https://github.com/anilgulecha>
+            <img src=https://avatars.githubusercontent.com/u/1016984?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Anil Gulecha/>
             <br />
-            <sub style="font-size:14px"><b>Rubén Salazar</b></sub>
+            <sub style="font-size:14px"><b>Anil Gulecha</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/zennnez>
+            <img src=https://avatars.githubusercontent.com/u/3524740?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=zen/>
+            <br />
+            <sub style="font-size:14px"><b>zen</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/cadao7>
+            <img src=https://avatars.githubusercontent.com/u/306330?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Ricardo Maminhak/>
+            <br />
+            <sub style="font-size:14px"><b>Ricardo Maminhak</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/ViFigueiredo>
+            <img src=https://avatars.githubusercontent.com/u/67883343?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=ViFigueiredo/>
+            <br />
+            <sub style="font-size:14px"><b>ViFigueiredo</b></sub>
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
@@ -298,22 +373,76 @@ Check the [API Reference](https://github.com/asternic/wuzapi/blob/main/API.md)
 </tr>
 <tr>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
-        <a href=https://github.com/cadao7>
-            <img src=https://avatars.githubusercontent.com/u/306330?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Ricardo Maminhak/>
+        <a href=https://github.com/ruben18salazar3>
+            <img src=https://avatars.githubusercontent.com/u/86245508?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Rubén Salazar/>
             <br />
-            <sub style="font-size:14px"><b>Ricardo Maminhak</b></sub>
+            <sub style="font-size:14px"><b>Rubén Salazar</b></sub>
         </a>
     </td>
     <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
-        <a href=https://github.com/zennnez>
-            <img src=https://avatars.githubusercontent.com/u/3524740?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=zen/>
+        <a href=https://github.com/renancesarti-cyber>
+            <img src=https://avatars.githubusercontent.com/u/235291917?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=renancesarti-cyber/>
             <br />
-            <sub style="font-size:14px"><b>zen</b></sub>
+            <sub style="font-size:14px"><b>renancesarti-cyber</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/JobasFernandes>
+            <img src=https://avatars.githubusercontent.com/u/26033148?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Joseph Fernandes/>
+            <br />
+            <sub style="font-size:14px"><b>Joseph Fernandes</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/joaokopernico>
+            <img src=https://avatars.githubusercontent.com/u/111400483?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=joaokopernico/>
+            <br />
+            <sub style="font-size:14px"><b>joaokopernico</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/fadlee>
+            <img src=https://avatars.githubusercontent.com/u/334797?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Fadlul Alim/>
+            <br />
+            <sub style="font-size:14px"><b>Fadlul Alim</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/elohmeier>
+            <img src=https://avatars.githubusercontent.com/u/2536303?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=elohmeier/>
+            <br />
+            <sub style="font-size:14px"><b>elohmeier</b></sub>
+        </a>
+    </td>
+</tr>
+<tr>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/DwiRizqiH>
+            <img src=https://avatars.githubusercontent.com/u/69355492?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Ahmad Dwi Rizqi Hidayatulloh/>
+            <br />
+            <sub style="font-size:14px"><b>Ahmad Dwi Rizqi Hidayatulloh</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/AntonKun>
+            <img src=https://avatars.githubusercontent.com/u/59668952?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Anton Kozyk/>
+            <br />
+            <sub style="font-size:14px"><b>Anton Kozyk</b></sub>
+        </a>
+    </td>
+    <td align="center" style="word-wrap: break-word; width: 150.0; height: 150.0">
+        <a href=https://github.com/AlanMartines>
+            <img src=https://avatars.githubusercontent.com/u/10979090?v=4 width="100;"  style="border-radius:50%;align-items:center;justify-content:center;overflow:hidden;padding-top:10px" alt=Alan Martines/>
+            <br />
+            <sub style="font-size:14px"><b>Alan Martines</b></sub>
         </a>
     </td>
 </tr>
 </table>
 
+## Clients
+
+- [wuzapi TypeScript / Node Client](https://github.com/gusnips/wuzapi-node)
 
 ## Star History
 
