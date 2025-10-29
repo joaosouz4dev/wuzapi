@@ -3335,22 +3335,24 @@ func (s *server) React() http.HandlerFunc {
 			}
 		}
 
-		key := &waCommon.MessageKey{
+		reactionMsg := &waE2E.ReactionMessage{
+			Text:              proto.String(reaction),
+			GroupingKey:       proto.String(reaction),
+			SenderTimestampMS: proto.Int64(time.Now().UnixMilli()),
+		}
+
+		// Build the message key structure
+		reactionMsg.Key = &waCommon.MessageKey{
 			RemoteJID: proto.String(recipient.String()),
 			FromMe:    proto.Bool(fromMe),
 			ID:        proto.String(msgid),
 		}
 		if !fromMe && participantJID.String() != "" {
-			key.Participant = proto.String(participantJID.String())
+			reactionMsg.Key.Participant = proto.String(participantJID.String())
 		}
 
 		msg := &waE2E.Message{
-			ReactionMessage: &waE2E.ReactionMessage{
-				Key:               key,
-				Text:              proto.String(reaction),
-				GroupingKey:       proto.String(reaction),
-				SenderTimestampMS: proto.Int64(time.Now().UnixMilli()),
-			},
+			ReactionMessage: reactionMsg,
 		}
 
 		resp, err = clientManager.GetWhatsmeowClient(txtid).SendMessage(context.Background(), recipient, msg)
