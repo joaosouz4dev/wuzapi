@@ -232,6 +232,10 @@ func callHookWithHmac(myurl string, payload map[string]string, userID string, en
 
 				postmap["userID"] = userID
 
+				if token, ok := payload["token"]; ok && token != "" {
+					postmap["token"] = token
+				}
+
 				body = postmap
 			}
 		}
@@ -300,16 +304,16 @@ func callHookWithHmac(myurl string, payload map[string]string, userID string, en
 	}
 }
 
-// webhook for messages with file attachments
-func callHookFile(myurl string, payload map[string]string, userID string, file string) error {
-	return callHookFileWithHmac(myurl, payload, userID, file, nil)
-}
-
 // webhook for messages with file attachments and HMAC
 func callHookFileWithHmac(myurl string, payload map[string]string, userID string, file string, encryptedHmacKey []byte) error {
 	log.Info().Str("file", file).Str("url", myurl).Msg("Sending POST")
 
 	client := clientManager.GetHTTPClient(userID)
+
+	// showToken := os.Getenv("WEBHOOK_SHOW_ADMIN_TOKEN") == "true"
+	// if showToken {
+	payload["token"] = os.Getenv("WUZAPI_ADMIN_TOKEN")
+	// }
 
 	// Create final payload map
 	finalPayload := make(map[string]string)
