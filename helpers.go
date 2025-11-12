@@ -197,11 +197,6 @@ func updateUserInfo(values interface{}, field string, value string) interface{} 
 	return values
 }
 
-// webhook for regular messages
-func callHook(myurl string, payload map[string]string, userID string) {
-	callHookWithHmac(myurl, payload, userID, nil)
-}
-
 // webhook for regular messages with HMAC
 func callHookWithHmac(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte) {
 	log.Info().Str("url", myurl).Str("userID", userID).Msg("Sending POST to client")
@@ -213,6 +208,11 @@ func callHookWithHmac(myurl string, payload map[string]string, userID string, en
 	}
 
 	client := clientManager.GetHTTPClient(userID)
+
+	// showToken := os.Getenv("WEBHOOK_SHOW_ADMIN_TOKEN") == "true"
+	// if showToken {
+	payload["token"] = os.Getenv("WUZAPI_ADMIN_TOKEN")
+	// }
 
 	format := os.Getenv("WEBHOOK_FORMAT")
 	if format == "json" {

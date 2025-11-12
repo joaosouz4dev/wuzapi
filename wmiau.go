@@ -60,12 +60,12 @@ func sendToGlobalWebHook(jsonData []byte, token string, userID string) {
 			"userID":       userID,
 			"instanceName": instance_name,
 		}
+		// showToken := os.Getenv("WEBHOOK_SHOW_ADMIN_TOKEN") == "true"
+		// if showToken {
+		globalData["token"] = os.Getenv("WUZAPI_ADMIN_TOKEN")
+		// }
 		callHookWithHmac(*globalWebhook, globalData, userID, globalHMACKeyEncrypted)
 	}
-}
-
-func sendToUserWebHook(webhookurl string, path string, jsonData []byte, userID string, token string) {
-	sendToUserWebHookWithHmac(webhookurl, path, jsonData, userID, token, nil)
 }
 
 func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, userID string, token string, encryptedHmacKey []byte) {
@@ -80,6 +80,10 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 		"userID":       userID,
 		"instanceName": instance_name,
 	}
+	// showToken := os.Getenv("WEBHOOK_SHOW_ADMIN_TOKEN") == "true"
+	// if showToken {
+	data["token"] = os.Getenv("WUZAPI_ADMIN_TOKEN")
+	// }
 
 	log.Debug().Interface("webhookData", data).Msg("Data being sent to webhook")
 
