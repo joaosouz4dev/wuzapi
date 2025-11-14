@@ -964,15 +964,16 @@ func (s *server) SendDocument() http.HandlerFunc {
 func (s *server) SendAudio() http.HandlerFunc {
 
 	type audioStruct struct {
-		Phone       string
-		Audio       string
-		Caption     string
-		Id          string
-		PTT         *bool  `json:"ptt,omitempty"`
-		MimeType    string `json:"mimetype,omitempty"`
-		Seconds     uint32
-		Waveform    []byte
-		ContextInfo waE2E.ContextInfo
+		Phone           string
+		Audio           string
+		Caption         string
+		Id              string
+		PTT             *bool       `json:"ptt,omitempty"`
+		MimeType        string      `json:"mimetype,omitempty"`
+		Seconds         uint32      `json:"seconds,omitempty"`
+		Waveform        []byte      `json:"waveform,omitempty"`
+		BackgroundColor interface{} `json:"backgroundColor,omitempty"`
+		ContextInfo     waE2E.ContextInfo
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1029,25 +1030,105 @@ func (s *server) SendAudio() http.HandlerFunc {
 				filedata = dataURL.Data
 			}
 		} else if isHTTPURL(t.Audio) {
-			data, ct, err := fetchURLBytes(r.Context(), t.Audio, openGraphAudioMaxBytes)
-			if err != nil {
-				s.Respond(w, r, http.StatusBadRequest, errors.New(fmt.Sprintf("failed to fetch audio from url: %v", err)))
+			data, contentType, err1 := fetchURLBytes(r.Context(), t.Audio, openGraphAudioMaxBytes)
+			if err1 != nil {
+				s.Respond(w, r, http.StatusBadRequest, errors.New(fmt.Sprintf("failed to fetch audio from url: %v", err1)))
 				return
 			}
-			mimeType := ct
-			if !strings.HasPrefix(strings.ToLower(mimeType), "audio/") {
-				mimeType = "audio/mpeg"
-			}
-			audioDataURL := dataurl.New(data, mimeType)
-			parsed, err := dataurl.DecodeString(audioDataURL.String())
-			if err != nil {
-				s.Respond(w, r, http.StatusInternalServerError, errors.New("could not re-encode audio to base64"))
+
+			// Valida se os dados não estão vazios
+			if len(data) == 0 {
+				s.Respond(w, r, http.StatusBadRequest, errors.New("received empty audio data from URL"))
 				return
 			}
-			filedata = parsed.Data
+
+			// Valida o tipo de conteúdo se disponível
+			if contentType != "" && !strings.Contains(strings.ToLower(contentType), "audio") {
+				log.Warn().Str("contentType", contentType).Msg("URL may not contain audio data")
+			}
+
+			// Validação básica do tamanho mínimo
+			if len(data) < 4 {
+				s.Respond(w, r, http.StatusBadRequest, errors.New("audio file too small to be valid"))
+				return
+			}
+
+			// Verifica se já é OGG/Opus ou precisa converter (apenas se PTT for true ou não especificado)
+			pttForConversion := true
+			if t.PTT != nil {
+				pttForConversion = *t.PTT
+			}
+
+			if pttForConversion && t.MimeType == "" {
+				isOggFormat := len(data) >= 4 && string(data[0:4]) == "OggS"
+				needsConversion := !isOggFormat || (contentType != "" && contentType != "audio/ogg; codecs=opus")
+
+				if needsConversion {
+					log.Info().Str("contentType", contentType).Bool("isOgg", isOggFormat).Msg("Converting audio to OGG/Opus format")
+
+					convertedData, err := ConvertAudioToOggOpus(data)
+					if err != nil {
+						log.Error().Err(err).Msg("Failed to convert audio to OGG/Opus")
+						s.Respond(w, r, http.StatusBadRequest, errors.New("failed to convert audio to required format"))
+						return
+					}
+					filedata = convertedData
+					log.Debug().Int("original_size", len(data)).Int("converted_size", len(filedata)).Msg("Audio converted to OGG/Opus successfully")
+				} else {
+					// Já está no formato correto
+					filedata = data
+					log.Debug().Int("filedata_size", len(filedata)).Msg("Audio already in OGG/Opus format")
+				}
+			} else {
+				filedata = data
+			}
 		} else {
 			s.Respond(w, r, http.StatusBadRequest, errors.New("audio data should start with \"data:audio/\" or be a valid HTTP(S) URL"))
 			return
+		}
+
+		// Gera waveform, duração e cor de fundo automaticamente se não fornecidos
+		var waveform []byte
+		var audioDuration uint32
+		var backgroundColor uint32
+
+		if len(filedata) > 0 {
+			// Usa waveform fornecido ou gera automaticamente
+			if len(t.Waveform) > 0 {
+				waveform = t.Waveform
+			} else {
+				wf, err := GenerateAudioWaveformFromOggOpus(filedata)
+				if err != nil {
+					log.Debug().Err(err).Msg("Failed to generate waveform - audio may be corrupted or invalid format")
+				} else {
+					waveform = wf
+					log.Debug().Int("waveform_length", len(waveform)).Msg("Waveform generated successfully")
+				}
+			}
+
+			// Usa duração fornecida ou detecta automaticamente
+			if t.Seconds > 0 {
+				audioDuration = t.Seconds
+			} else {
+				duration, err := GetAudioDuration(filedata)
+				if err != nil {
+					log.Debug().Err(err).Msg("Failed to get audio duration - ffprobe may not be available or audio is invalid")
+				} else {
+					audioDuration = duration
+					log.Debug().Uint32("duration_seconds", audioDuration).Msg("Audio duration obtained successfully")
+				}
+			}
+
+			// Processa cor de fundo se fornecida (para PTT)
+			if t.BackgroundColor != nil {
+				bgColor, err := AssertColor(t.BackgroundColor)
+				if err != nil {
+					log.Debug().Err(err).Interface("color", t.BackgroundColor).Msg("Failed to process background color - invalid color format")
+				} else {
+					backgroundColor = bgColor
+					log.Debug().Uint32("background_color", backgroundColor).Msg("Background color processed successfully")
+				}
+			}
 		}
 
 		uploaded, err = clientManager.GetWhatsmeowClient(txtid).Upload(context.Background(), filedata, whatsmeow.MediaAudio)
@@ -1056,7 +1137,7 @@ func (s *server) SendAudio() http.HandlerFunc {
 			return
 		}
 
-		// Configure PTT (Push to Talk) - default is true, setting it to false is a breaking change
+		// Configure PTT (Push to Talk) - default is true
 		ptt := true
 		if t.PTT != nil {
 			ptt = *t.PTT
@@ -1084,9 +1165,22 @@ func (s *server) SendAudio() http.HandlerFunc {
 			FileSHA256:    uploaded.FileSHA256,
 			FileLength:    proto.Uint64(uint64(len(filedata))),
 			PTT:           &ptt,
-			Seconds:       proto.Uint32(t.Seconds),
-			Waveform:      t.Waveform,
 		}}
+
+		// Adiciona waveform se disponível
+		if len(waveform) > 0 {
+			msg.AudioMessage.Waveform = waveform
+		}
+
+		// Adiciona duração se disponível
+		if audioDuration > 0 {
+			msg.AudioMessage.Seconds = proto.Uint32(audioDuration)
+		}
+
+		// Adiciona cor de fundo se disponível
+		if backgroundColor > 0 {
+			msg.AudioMessage.BackgroundArgb = proto.Uint32(backgroundColor)
+		}
 
 		if t.ContextInfo.StanzaID != nil {
 			msg.AudioMessage.ContextInfo = &waE2E.ContextInfo{
