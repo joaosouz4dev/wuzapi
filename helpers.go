@@ -40,8 +40,10 @@ import (
 
 const (
 	openGraphFetchTimeout    = 5 * time.Second
-	openGraphPageMaxBytes    = 2 * 1024 * 1024  // 2MB
-	openGraphImageMaxBytes   = 10 * 1024 * 1024 // 10MB
+	openGraphPageMaxBytes    = 2 * 1024 * 1024   // 2MB
+	openGraphImageMaxBytes   = 10 * 1024 * 1024  // 10MB
+	openGraphAudioMaxBytes   = 50 * 1024 * 1024  // 50MB
+	openGraphDocMaxBytes     = 100 * 1024 * 1024 // 100MB
 	openGraphThumbnailWidth  = 100
 	openGraphThumbnailHeight = 100
 	openGraphJpegQuality     = 80
