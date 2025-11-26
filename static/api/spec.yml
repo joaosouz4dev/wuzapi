@@ -560,6 +560,113 @@ paths:
           description: S3 is not enabled or configuration error
         500:
           description: S3 connection test failed
+  /session/history:
+    get:
+      tags:
+        - Session
+      summary: Request history sync
+      description: Requests WhatsApp to sync message history for the connected session. Supports query parameters to customize the sync request.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: count
+          in: query
+          description: Number of messages to sync (default 50)
+          required: false
+          schema:
+              type: integer
+              minimum: 1
+              maximum: 1000
+              example: 50
+        - name: chat_jid
+          in: query
+          description: JID of the chat to sync history for (e.g., 120363313346913103@g.us for groups or 5521971532700@s.whatsapp.net for DMs)
+          required: false
+          schema:
+            type: string
+            example: 120363313346913103@g.us
+        - name: oldest_msg_id
+          in: query
+          description: Message ID of the oldest message to start sync from
+          required: false
+          schema:
+            type: string
+            example: ABC123DEF456
+        - name: oldest_msg_from_me
+          in: query
+          description: Whether the oldest message was sent by the current user
+          required: false
+          schema:
+            type: boolean
+            example: true
+        - name: oldest_msg_timestamp
+          in: query
+          description: Timestamp of the oldest message in milliseconds
+          required: false
+          schema:
+            type: integer
+            example: 1640995200000
+      responses:
+        '200':
+          description: History sync requested successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      details:
+                        type: string
+                        example: 'History sync request Sent'
+                      timestamp:
+                        type: integer
+                        format: int64
+                        description: Unix timestamp when the request was sent
+                        example: 1640995200
+                      count:
+                        type: integer
+                        description: Number of messages requested for sync
+                        example: 50
+                      chat_jid:
+                        type: string
+                        description: JID of the chat being synced
+                        example: 120363313346913103@g.us
+                      oldest_msg_id:
+                        type: string
+                        description: ID of the oldest message for sync
+                        example: ABC123DEF456
+                      oldest_msg_from_me:
+                        type: boolean
+                        description: Whether the oldest message was from the user
+                        example: true
+                      oldest_msg_timestamp:
+                        type: integer
+                        format: int64
+                        description: Timestamp of the oldest message in milliseconds
+                        example: 1640995200000
+                example:
+                  code: 200
+                  success: true
+                  data:
+                    details: 'History sync request Sent'
+                    timestamp: 1640995200
+                    count: 50
+                    chat_jid: '120363313346913103@g.us'
+                    oldest_msg_id: 'ABC123DEF456'
+                    oldest_msg_from_me: true
+                    oldest_msg_timestamp: 1640995200000
+        '400':
+          description: Bad request or session not connected
+        '500':
+          description: Internal server error
   /session/hmac/config:
     post:
       tags:
@@ -1163,7 +1270,7 @@ paths:
       tags:
         - Chat 
       summary: Sends a sticker message
-      description: Sends a sticker message (must be base64 encoded in image/webp format)
+      description: Sends a sticker message (must be base64 encoded in image/webp or video/mp4 format)
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -1309,6 +1416,28 @@ paths:
             application/json:
               schema:
                 example: {"code":200,"data":{"Data":"data:image/jpeg;base64,iVBORw0KGgoA5CYII...=","Mimetype":"image/jpeg"},"success":true}
+  /chat/downloadsticker:
+    post:
+      tags:
+        - Chat
+      summary: Downloads Sticker from message
+      description: Downloads a Sticker from a message and returns it Base64 media encoded
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/definitions/DownloadMedia'
+
+      responses:
+        200:
+          description: Response
+          content:
+            application/json:
+              schema:
+                example: {"code":200,"data":{"Data":"data:image/webp;base64,iVBORw0KGgoA5CYII...=","Mimetype":"image/webp"},"success":true}
   /chat/downloadvideo:
     post:
       tags:
@@ -2420,10 +2549,26 @@ definitions:
       PngThumbnail:
         type: string
         example: "AA00D010"
+      MimeType:
+        type: string
+        example: "image/webp"
+      PackId:
+        type: string
+        example: "my.sticker.pack.id"
+      PackName:
+        type: string
+        example: "My Pack"
+      PackPublisher:
+        type: string
+        example: "Wuzapi"
+      Emojis:
+        type: array
+        items:
+          type: string
+        example: ["😀", "🎉"]
       ContextInfo:
         $ref: "#/definitions/ContextInfo"
- 
-
+        description: "Optional context info for replies, mentions, and forwarding"
   MessageDocument:
     type: object
     required: 

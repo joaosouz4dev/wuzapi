@@ -22,8 +22,12 @@ func (s *server) routes() {
 	exPath := filepath.Dir(ex)
 
 	var routerLog zerolog.Logger
+	logOutput := os.Stdout
+	if s.mode == Stdio {
+		logOutput = os.Stderr
+	}
 	if *logType == "json" {
-		routerLog = zerolog.New(os.Stdout).
+		routerLog = zerolog.New(logOutput).
 			With().
 			Timestamp().
 			Str("role", filepath.Base(os.Args[0])).
@@ -31,7 +35,7 @@ func (s *server) routes() {
 			Logger()
 	} else {
 		output := zerolog.ConsoleWriter{
-			Out:        os.Stdout,
+			Out:        logOutput,
 			TimeFormat: time.RFC3339,
 			NoColor:    !*colorOutput,
 		}
@@ -135,6 +139,7 @@ func (s *server) routes() {
 	s.router.Handle("/chat/downloadvideo", c.Then(s.DownloadVideo())).Methods("POST")
 	s.router.Handle("/chat/downloadaudio", c.Then(s.DownloadAudio())).Methods("POST")
 	s.router.Handle("/chat/downloaddocument", c.Then(s.DownloadDocument())).Methods("POST")
+	s.router.Handle("/chat/downloadsticker", c.Then(s.DownloadSticker())).Methods("POST")
 
 	s.router.Handle("/group/create", c.Then(s.CreateGroup())).Methods("POST")
 	s.router.Handle("/group/list", c.Then(s.ListGroups())).Methods("GET")

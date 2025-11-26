@@ -30,10 +30,12 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/go-resty/resty/v2"
 	"github.com/jmoiron/sqlx"
 	"github.com/nfnt/resize"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
+	"github.com/vincent-petithory/dataurl"
 	_ "golang.org/x/image/webp"
 	"golang.org/x/sync/singleflight"
 )
@@ -51,6 +53,24 @@ const (
 	openGraphUserFetchLimit  = 20   // Limit concurrent Open Graph fetches per user
 )
 
+type WebhookFileErrorPayload struct {
+	URL              string                 `json:"url"`
+	Payload          map[string]interface{} `json:"payload"`
+	UserID           string                 `json:"userID"`
+	EncryptedHmacKey string                 `json:"encryptedHmacKey"`
+	FilePath         string                 `json:"filePath"`
+	AttemptTime      time.Time              `json:"attemptTime"`
+	ErrorMessage     string                 `json:"errorMessage"`
+}
+
+type WebhookErrorPayload struct {
+	URL              string                 `json:"url"`
+	Payload          map[string]interface{} `json:"payload"`
+	UserID           string                 `json:"userID"`
+	EncryptedHmacKey string                 `json:"encryptedHmacKey"`
+	AttemptTime      time.Time              `json:"attemptTime"`
+	ErrorMessage     string                 `json:"errorMessage"`
+}
 type openGraphResult struct {
 	Title       string
 	Description string
@@ -201,172 +221,266 @@ func updateUserInfo(values interface{}, field string, value string) interface{} 
 
 // webhook for regular messages with HMAC
 func callHookWithHmac(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte) {
-	log.Info().Str("url", myurl).Str("userID", userID).Msg("Sending POST to client")
-
-	// Log the payload map
-	log.Debug().Msg("Payload:")
-	for key, value := range payload {
-		log.Debug().Str(key, value).Msg("")
-	}
+	log.Info().Str("url", myurl).Str("userID", userID).Msg("Sending POST to client with retry logic")
 
 	client := clientManager.GetHTTPClient(userID)
 
-	// showToken := os.Getenv("WEBHOOK_SHOW_ADMIN_TOKEN") == "true"
-	// if showToken {
-	payload["token"] = os.Getenv("WUZAPI_ADMIN_TOKEN")
-	// }
+	// Retry settings
+	maxRetries := 1
+	if *webhookRetryEnabled {
+		maxRetries = *webhookRetryCount
+	}
 
-	format := os.Getenv("WEBHOOK_FORMAT")
-	if format == "json" {
-		// Send as pure JSON
-		// The original payload is a map[string]string, but we want to send the postmap (map[string]interface{})
-		// So we try to decode the jsonData field if it exists, otherwise we send the original payload
-		var body interface{} = payload
-		var jsonBody []byte
+	var lastError error
 
-		if jsonStr, ok := payload["jsonData"]; ok {
-			var postmap map[string]interface{}
-			err := json.Unmarshal([]byte(jsonStr), &postmap)
-			if err == nil {
-				if instanceName, ok := payload["instanceName"]; ok {
-					postmap["instanceName"] = instanceName
-				}
+	var body interface{} = payload
 
-				postmap["userID"] = userID
+	// Starts the retry loop.
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			backoffFactor := 1 << uint(attempt-1)
 
-				if token, ok := payload["token"]; ok && token != "" {
-					postmap["token"] = token
-				}
+			// Calculate the final delay.
+			delayDuration := time.Duration(*webhookRetryDelaySeconds) * time.Second * time.Duration(backoffFactor)
 
-				body = postmap
-			}
+			log.Warn().
+				Int("attempt", attempt+1).
+				Str("url", myurl).
+				Dur("delay", delayDuration).
+				Msg("Retrying webhook request with exponential backoff...")
+
+			time.Sleep(delayDuration)
 		}
 
-		// Marshal body to JSON for HMAC signature
-		jsonBody, marshalErr := json.Marshal(body)
-		if marshalErr != nil {
-			log.Error().Err(marshalErr).Msg("Failed to marshal body for HMAC")
-		}
-
-		// Generate HMAC signature if key exists
+		var req *resty.Request
 		var hmacSignature string
-		var err error
-		if len(encryptedHmacKey) > 0 && len(jsonBody) > 0 {
-			hmacSignature, err = generateHmacSignature(jsonBody, encryptedHmacKey)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to generate HMAC signature")
-			} else {
-				log.Debug().Str("hmacSignature", hmacSignature).Msg("Generated HMAC signature")
+		var marshalErr error
+
+		format := os.Getenv("WEBHOOK_FORMAT")
+
+		if format == "json" {
+			var jsonBody []byte
+
+			if jsonStr, ok := payload["jsonData"]; ok {
+				var postmap map[string]interface{}
+
+				if err := json.Unmarshal([]byte(jsonStr), &postmap); err == nil {
+					if instanceName, ok := payload["instanceName"]; ok {
+						postmap["instanceName"] = instanceName
+					}
+					postmap["userID"] = userID
+
+					if token, ok := payload["token"]; ok && token != "" {
+						postmap["token"] = token
+					}
+
+					body = postmap
+				}
 			}
+
+			// Marshal body to JSON for HMAC signature
+			jsonBody, marshalErr = json.Marshal(body)
+			if marshalErr != nil {
+				log.Error().Err(marshalErr).Msg("Failed to marshal body for HMAC")
+			}
+
+			// Generate HMAC signature if key exists
+			if len(encryptedHmacKey) > 0 && len(jsonBody) > 0 {
+				var err error
+				hmacSignature, err = generateHmacSignature(jsonBody, encryptedHmacKey)
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to generate HMAC signature")
+				}
+			}
+
+			req = client.R().SetHeader("Content-Type", "application/json").SetBody(body)
+
+		} else {
+
+			if len(encryptedHmacKey) > 0 {
+				formData := url.Values{}
+				for k, v := range payload {
+					formData.Add(k, v)
+				}
+				formString := formData.Encode()
+				var err error
+				hmacSignature, err = generateHmacSignature([]byte(formString), encryptedHmacKey)
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to generate HMAC signature")
+				}
+			}
+			req = client.R().SetFormData(payload)
+			body = payload
 		}
 
-		req := client.R().
-			SetHeader("Content-Type", "application/json").
-			SetBody(body)
-
-		// Add HMAC signature header if available
 		if hmacSignature != "" {
 			req.SetHeader("x-hmac-signature", hmacSignature)
 		}
 
-		_, postErr := req.Post(myurl)
+		resp, postErr := req.Post(myurl)
+
+		lastError = postErr
+
 		if postErr != nil {
-			log.Debug().Str("error", postErr.Error())
+			log.Error().Err(postErr).Int("attempt", attempt+1).Str("url", myurl).Msg("Webhook failed due to network/IO error")
+			continue
 		}
-	} else {
-		/// Default: send as form-urlencoded
-		// Generate HMAC signature if encrypted key exists
-		var hmacSignature string
-		var err error
-		if len(encryptedHmacKey) > 0 {
-			formData := url.Values{}
-			for k, v := range payload {
-				formData.Add(k, v)
+
+		if resp.StatusCode() < 200 || resp.StatusCode() >= 300 {
+			lastError = fmt.Errorf("unexpected status code: %d. Body: %s", resp.StatusCode(), string(resp.Body()))
+			log.Error().
+				Int("status", resp.StatusCode()).
+				Int("attempt", attempt+1).
+				Str("url", myurl).
+				Msg("Webhook failed due to non-2xx status code")
+
+			if !*webhookRetryEnabled {
+				break
 			}
-			formString := formData.Encode() // "token=abc&message=hello"
+			continue
+		}
 
-			hmacSignature, err = generateHmacSignature([]byte(formString), encryptedHmacKey)
-			if err != nil {
-				log.Error().Err(err).Msg("Failed to generate HMAC signature")
-			} else {
-				log.Debug().Str("hmacSignature", hmacSignature).Msg("Generated HMAC signature for form-data")
+		log.Info().Int("status", resp.StatusCode()).Str("url", myurl).Msg("Webhook call successful")
+		return
+	}
+
+	if lastError != nil {
+		log.Error().Str("url", myurl).Msg("Webhook permanently failed after all retries. Sending to error queue...")
+
+		errorPayloadMap := make(map[string]interface{})
+		if p, ok := body.(map[string]string); ok {
+
+			for k, v := range p {
+				errorPayloadMap[k] = v
 			}
+		} else if p, ok := body.(map[string]interface{}); ok {
+
+			errorPayloadMap = p
 		}
 
-		req := client.R().SetFormData(payload)
-		// Add HMAC signature header if available
-		if hmacSignature != "" {
-			req.SetHeader("x-hmac-signature", hmacSignature)
+		errorPayload := WebhookErrorPayload{
+			URL:              myurl,
+			Payload:          errorPayloadMap,
+			UserID:           userID,
+			EncryptedHmacKey: hex.EncodeToString(encryptedHmacKey),
+			AttemptTime:      time.Now(),
+			ErrorMessage:     lastError.Error(),
 		}
 
-		_, postErr := req.Post(myurl)
-		if postErr != nil {
-			log.Debug().Str("error", postErr.Error())
-		}
+		PublishDataErrorToQueue(errorPayload)
 	}
 }
 
 // webhook for messages with file attachments and HMAC
 func callHookFileWithHmac(myurl string, payload map[string]string, userID string, file string, encryptedHmacKey []byte) error {
-	log.Info().Str("file", file).Str("url", myurl).Msg("Sending POST")
+	log.Info().Str("file", file).Str("url", myurl).Msg("Sending POST with retry logic")
 
 	client := clientManager.GetHTTPClient(userID)
 
-	// showToken := os.Getenv("WEBHOOK_SHOW_ADMIN_TOKEN") == "true"
-	// if showToken {
-	payload["token"] = os.Getenv("WUZAPI_ADMIN_TOKEN")
-	// }
+	maxRetries := 1
+	if *webhookRetryEnabled {
+		maxRetries = *webhookRetryCount
+	}
 
-	// Create final payload map
+	var lastError error
+
 	finalPayload := make(map[string]string)
 	for k, v := range payload {
 		finalPayload[k] = v
 	}
-
 	finalPayload["file"] = file
 
-	log.Debug().Interface("finalPayload", finalPayload).Msg("Final payload to be sent")
+	// 2. Loop Retry
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			backoffFactor := 1 << uint(attempt-1)
 
-	// Generate HMAC signature if key exists
-	var hmacSignature string
-	var jsonPayload []byte
-	var err error
+			delayDuration := time.Duration(*webhookRetryDelaySeconds) * time.Second * time.Duration(backoffFactor)
 
-	if len(encryptedHmacKey) > 0 {
-		// Para multipart/form-data, assinar a representação JSON do payload final
-		jsonPayload, err = json.Marshal(finalPayload)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to marshal payload for HMAC")
-		} else {
-			hmacSignature, err = generateHmacSignature(jsonPayload, encryptedHmacKey)
+			log.Warn().
+				Int("attempt", attempt+1).
+				Str("url", myurl).
+				Dur("delay", delayDuration).
+				Msg("Retrying file webhook request with exponential backoff...")
+
+			time.Sleep(delayDuration)
+		}
+
+		var hmacSignature string
+		var jsonPayload []byte
+
+		if len(encryptedHmacKey) > 0 {
+			var err error
+			jsonPayload, err = json.Marshal(finalPayload)
 			if err != nil {
-				log.Error().Err(err).Msg("Failed to generate HMAC signature")
+				log.Error().Err(err).Msg("Failed to marshal payload for HMAC")
 			} else {
-				log.Debug().Str("hmacSignature", hmacSignature).Msg("Generated HMAC signature for file webhook")
+				hmacSignature, err = generateHmacSignature(jsonPayload, encryptedHmacKey)
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to generate HMAC signature")
+				}
 			}
 		}
+
+		req := client.R().
+			SetFiles(map[string]string{
+				"file": file,
+			}).
+			SetFormData(finalPayload)
+
+		if hmacSignature != "" {
+			req.SetHeader("x-hmac-signature", hmacSignature)
+		}
+
+		resp, postErr := req.Post(myurl)
+
+		lastError = postErr
+
+		if postErr != nil {
+			log.Error().Err(postErr).Int("attempt", attempt+1).Str("url", myurl).Msg("File webhook failed due to network/IO error")
+			continue
+		}
+
+		if resp.StatusCode() < 200 || resp.StatusCode() >= 300 {
+			lastError = fmt.Errorf("unexpected status code: %d. Body: %s", resp.StatusCode(), string(resp.Body()))
+			log.Error().
+				Int("status", resp.StatusCode()).
+				Int("attempt", attempt+1).
+				Str("url", myurl).
+				Msg("File webhook failed due to non-2xx status code")
+
+			if !*webhookRetryEnabled {
+				break
+			}
+			continue
+		}
+
+		log.Info().Int("status", resp.StatusCode()).Str("url", myurl).Msg("File webhook call successful")
+		return nil
 	}
 
-	req := client.R().
-		SetFiles(map[string]string{
-			"file": file,
-		}).
-		SetFormData(finalPayload)
+	if lastError != nil {
+		log.Error().Str("url", myurl).Msg("File webhook permanently failed after all retries. Sending to error queue...")
 
-	// Add HMAC signature header if available
-	if hmacSignature != "" {
-		req.SetHeader("x-hmac-signature", hmacSignature)
+		errorPayloadMap := make(map[string]interface{})
+		for k, v := range finalPayload {
+			errorPayloadMap[k] = v
+		}
+
+		errorPayload := WebhookFileErrorPayload{
+			URL:              myurl,
+			Payload:          errorPayloadMap,
+			UserID:           userID,
+			EncryptedHmacKey: hex.EncodeToString(encryptedHmacKey),
+			FilePath:         file,
+			AttemptTime:      time.Now(),
+			ErrorMessage:     lastError.Error(),
+		}
+
+		PublishFileErrorToQueue(errorPayload)
+
+		return fmt.Errorf("webhook failed permanently: %w", lastError)
 	}
-
-	resp, err := req.Post(myurl)
-
-	if err != nil {
-		log.Error().Err(err).Str("url", myurl).Msg("Failed to send POST request")
-		return fmt.Errorf("failed to send POST request: %w", err)
-	}
-
-	log.Debug().Interface("payload", finalPayload).Msg("Payload sent to webhook")
-	log.Info().Int("status", resp.StatusCode()).Str("body", string(resp.Body())).Msg("POST request completed")
 
 	return nil
 }
@@ -863,4 +977,204 @@ func assertColorFromString(color string) (uint32, error) {
 	}
 
 	return uint32(result), nil
+}
+
+func convertVideoStickerToWebP(input []byte) ([]byte, error) {
+	inFile, err := os.CreateTemp("", "sticker-input-*.mp4")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(inFile.Name())
+	defer inFile.Close()
+
+	if _, err := inFile.Write(input); err != nil {
+		return nil, err
+	}
+
+	outFile, err := os.CreateTemp("", "sticker-output-*.webp")
+	if err != nil {
+		return nil, err
+	}
+	outPath := outFile.Name()
+	outFile.Close()
+	defer os.Remove(outPath)
+
+	qValue := 10
+	filter := "fps=15,scale=512:512:force_original_aspect_ratio=increase,crop=512:512"
+	cmd := exec.Command(
+		"ffmpeg",
+		"-y",
+		"-t", "10",
+		"-i", inFile.Name(),
+		"-vf", filter,
+		"-loop", "0",
+		"-an",
+		"-vsync", "0",
+		"-fs", "1000000",
+		"-c:v", "libwebp",
+		"-qscale:v", fmt.Sprintf("%d", qValue),
+		outPath,
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		log.Error().Err(err).Str("stderr", stderr.String()).Msg("ffmpeg failed converting video sticker")
+		return nil, err
+	}
+
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func processStickerData(stickerData string, mimeOverride string, packID, packName, packPublisher string, emojis []string) ([]byte, string, error) {
+	if !strings.HasPrefix(stickerData, "data") {
+		return nil, "", fmt.Errorf("data should start with \"data:mime/type;base64,\"")
+	}
+
+	dataURL, err := dataurl.DecodeString(stickerData)
+	if err != nil {
+		return nil, "", fmt.Errorf("could not decode base64 encoded data from payload")
+	}
+
+	filedata := dataURL.Data
+	detectedMimeType := http.DetectContentType(filedata)
+
+	if mimeOverride != "" {
+		detectedMimeType = mimeOverride
+	}
+
+	// If this is a video sticker, convert to animated WebP
+	if strings.HasPrefix(detectedMimeType, "video/") {
+		converted, err := convertVideoStickerToWebP(filedata)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to convert video sticker to webp: %w", err)
+		}
+		filedata = converted
+		detectedMimeType = "image/webp"
+	}
+
+	// If we have sticker metadata and the content is WebP, embed EXIF metadata
+	if strings.HasPrefix(detectedMimeType, "image/webp") {
+		filedata = embedStickerEXIF(filedata, packID, packName, packPublisher, emojis)
+	}
+
+	return filedata, detectedMimeType, nil
+}
+
+// embedStickerEXIF injects WhatsApp sticker metadata into a WebP image.
+func embedStickerEXIF(inputWebP []byte, packID, packName, packPublisher string, emojis []string) []byte {
+	if packID == "" && packName == "" && packPublisher == "" && len(emojis) == 0 {
+		return inputWebP
+	}
+
+	meta := map[string]interface{}{}
+	if packID != "" {
+		meta["sticker-pack-id"] = packID
+	}
+	if packName != "" {
+		meta["sticker-pack-name"] = packName
+	}
+	if packPublisher != "" {
+		meta["sticker-pack-publisher"] = packPublisher
+	}
+	if len(emojis) > 0 {
+		meta["emojis"] = emojis
+	}
+
+	jsonBytes, err := json.Marshal(meta)
+	if err != nil {
+		return inputWebP
+	}
+
+	starting := []byte{0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00}
+	ending := []byte{0x16, 0x00, 0x00, 0x00}
+
+	var exifBuf bytes.Buffer
+	exifBuf.Write(starting)
+	lenBuf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(lenBuf, uint32(len(jsonBytes)))
+	exifBuf.Write(lenBuf)
+	exifBuf.Write(ending)
+	exifBuf.Write(jsonBytes)
+
+	out, err := injectWebPExifChunk(inputWebP, exifBuf.Bytes())
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to inject EXIF chunk; sending sticker without metadata")
+		return inputWebP
+	}
+	return out
+}
+
+// injectWebPExifChunk adds/replaces EXIF chunk and sets EXIF bit in VP8X if present.
+func injectWebPExifChunk(in []byte, exif []byte) ([]byte, error) {
+	if len(in) < 12 || string(in[0:4]) != "RIFF" || string(in[8:12]) != "WEBP" {
+		return nil, fmt.Errorf("not a RIFF WEBP file")
+	}
+
+	var out bytes.Buffer
+	out.Grow(len(in) + len(exif) + 32)
+	out.WriteString("RIFF")
+	out.Write([]byte{0, 0, 0, 0})
+	out.WriteString("WEBP")
+
+	pos := 12
+	vp8xIndex := -1
+	var chunks [][]byte
+	for pos+8 <= len(in) {
+		tag := string(in[pos : pos+4])
+		size := int(binary.LittleEndian.Uint32(in[pos+4 : pos+8]))
+		dataStart := pos + 8
+		dataEnd := dataStart + size
+		if dataEnd > len(in) {
+			return nil, fmt.Errorf("truncated webp chunk: %s", tag)
+		}
+		pad := size & 1
+		next := dataEnd + pad
+		if tag == "VP8X" && size >= 10 {
+			vp8xIndex = len(chunks)
+		}
+		if tag != "EXIF" {
+			chunk := make([]byte, 8+size+pad)
+			copy(chunk[0:4], in[pos:pos+4])
+			binary.LittleEndian.PutUint32(chunk[4:8], uint32(size))
+			copy(chunk[8:8+size], in[dataStart:dataEnd])
+			if pad == 1 {
+				chunk[8+size] = 0
+			}
+			chunks = append(chunks, chunk)
+		}
+		pos = next
+	}
+
+	if vp8xIndex >= 0 {
+		c := chunks[vp8xIndex]
+		if len(c) >= 18 {
+			c[8] = c[8] | 0x04
+			chunks[vp8xIndex] = c
+		}
+	}
+
+	for _, c := range chunks {
+		out.Write(c)
+	}
+
+	exifSize := len(exif)
+	out.WriteString("EXIF")
+	sz := make([]byte, 4)
+	binary.LittleEndian.PutUint32(sz, uint32(exifSize))
+	out.Write(sz)
+	out.Write(exif)
+	if exifSize%2 == 1 {
+		out.WriteByte(0)
+	}
+
+	b := out.Bytes()
+	riffSize := uint32(len(b) - 8)
+	binary.LittleEndian.PutUint32(b[4:8], riffSize)
+	return b, nil
 }
