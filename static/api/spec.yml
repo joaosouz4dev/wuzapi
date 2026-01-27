@@ -952,7 +952,7 @@ paths:
       tags:
         - Chat 
       summary: Sends a text message
-      description: Sends a text message. Phone and Body are mandatory. If no Id is supplied, a random one will be generated. ContextInfo is optional and used when repyling to some message. StanzaId is the message id we are replying to and participant who wrote that message. If sending a new message, ContextInfo can be ommited altogether.
+      description: Sends a text message. Phone and Body are mandatory. If no Id is supplied, a random one will be generated. ContextInfo is optional and used when repyling to some message. StanzaID is the message id we are replying to and participant who wrote that message. If sending a new message, ContextInfo can be ommited altogether.
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -1991,7 +1991,7 @@ definitions:
     type: object
     description: "Optional context info for replies"
     properties:
-      StanzaId:
+      StanzaID:
         type: string
         example: "3EB06F9067F80BAB89FF"
         description: "Message ID to reply to"
@@ -2420,10 +2420,10 @@ definitions:
       ContextInfo:
         type: object
         required:
-          - StanzaId
+          - StanzaID
           - Participant
         properties:
-          StanzaId: 
+          StanzaID: 
             type: string
             example: "3EB06F9067F80BAB89FF" 
           Participant: 
@@ -2620,10 +2620,10 @@ definitions:
       ContextInfo:
         type: object
         required:
-          - StanzaId
+          - StanzaID
           - Participant
         properties:
-          StanzaId:
+          StanzaID:
             type: string
             example: "3EB06F9067F80BAB89FF"
           Participant:
