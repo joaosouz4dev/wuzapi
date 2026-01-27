@@ -817,6 +817,7 @@ func (s *server) SendDocument() http.HandlerFunc {
 		Id          string
 		MimeType    string
 		ContextInfo waE2E.ContextInfo
+		QuotedMessage *waE2E.Message `json:"QuotedMessage,omitempty"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -924,10 +925,22 @@ func (s *server) SendDocument() http.HandlerFunc {
 		}}
 
 		if t.ContextInfo.StanzaID != nil {
-			msg.DocumentMessage.ContextInfo = &waE2E.ContextInfo{
-				StanzaID:      proto.String(*t.ContextInfo.StanzaID),
-				Participant:   proto.String(*t.ContextInfo.Participant),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
+			var qm *waE2E.Message
+
+			// If QuotedMessage was provided, use it.
+			if t.QuotedMessage != nil {
+				qm = t.QuotedMessage
+			} else {
+				// Otherwise, it uses the old logic (empty message).
+				qm = &waE2E.Message{Conversation: proto.String("")}
+			}
+
+			if msg.DocumentMessage.ContextInfo == nil {
+				msg.DocumentMessage.ContextInfo = &waE2E.ContextInfo{
+					StanzaID:      proto.String(*t.ContextInfo.StanzaID),
+					Participant:   proto.String(*t.ContextInfo.Participant),
+					QuotedMessage: qm,
+				}
 			}
 		}
 		if t.ContextInfo.MentionedJID != nil {
@@ -974,12 +987,13 @@ func (s *server) SendAudio() http.HandlerFunc {
 		Audio           string
 		Caption         string
 		Id              string
-		PTT             *bool       `json:"ptt,omitempty"`
-		MimeType        string      `json:"mimetype,omitempty"`
-		Seconds         uint32      `json:"seconds,omitempty"`
-		Waveform        []byte      `json:"waveform,omitempty"`
-		BackgroundColor interface{} `json:"backgroundColor,omitempty"`
+		PTT             *bool                 `json:"ptt,omitempty"`
+		MimeType        string                `json:"mimetype,omitempty"`
+		Seconds         uint32                `json:"seconds,omitempty"`
+		Waveform        []byte                `json:"waveform,omitempty"`
+		BackgroundColor interface{}           `json:"backgroundColor,omitempty"`
 		ContextInfo     waE2E.ContextInfo
+		QuotedMessage   *waE2E.Message        `json:"QuotedMessage,omitempty"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1189,10 +1203,22 @@ func (s *server) SendAudio() http.HandlerFunc {
 		}
 
 		if t.ContextInfo.StanzaID != nil {
-			msg.AudioMessage.ContextInfo = &waE2E.ContextInfo{
-				StanzaID:      proto.String(*t.ContextInfo.StanzaID),
-				Participant:   proto.String(*t.ContextInfo.Participant),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
+			var qm *waE2E.Message
+
+			// If QuotedMessage was provided, use it.
+			if t.QuotedMessage != nil {
+				qm = t.QuotedMessage
+			} else {
+				// Otherwise, it uses the old logic (empty message).
+				qm = &waE2E.Message{Conversation: proto.String("")}
+			}
+
+			if msg.AudioMessage.ContextInfo == nil {
+				msg.AudioMessage.ContextInfo = &waE2E.ContextInfo{
+					StanzaID:      proto.String(*t.ContextInfo.StanzaID),
+					Participant:   proto.String(*t.ContextInfo.Participant),
+					QuotedMessage: qm,
+				}
 			}
 		}
 		if t.ContextInfo.MentionedJID != nil {
@@ -1235,12 +1261,13 @@ func (s *server) SendAudio() http.HandlerFunc {
 func (s *server) SendImage() http.HandlerFunc {
 
 	type imageStruct struct {
-		Phone       string
-		Image       string
-		Caption     string
-		Id          string
-		MimeType    string
-		ContextInfo waE2E.ContextInfo
+		Phone         string
+		Image         string
+		Caption       string
+		Id            string
+		MimeType      string
+		ContextInfo   waE2E.ContextInfo
+		QuotedMessage *waE2E.Message `json:"QuotedMessage,omitempty"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1373,11 +1400,21 @@ func (s *server) SendImage() http.HandlerFunc {
 		}}
 
 		if t.ContextInfo.StanzaID != nil {
+			var qm *waE2E.Message
+
+			// If QuotedMessage was provided, use it.
+			if t.QuotedMessage != nil {
+				qm = t.QuotedMessage
+			} else {
+				// Otherwise, it uses the old logic (empty message).
+				qm = &waE2E.Message{Conversation: proto.String("")}
+			}
+
 			if msg.ImageMessage.ContextInfo == nil {
 				msg.ImageMessage.ContextInfo = &waE2E.ContextInfo{
 					StanzaID:      proto.String(*t.ContextInfo.StanzaID),
 					Participant:   proto.String(*t.ContextInfo.Participant),
-					QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
+					QuotedMessage: qm,
 				}
 			}
 		}
@@ -1432,6 +1469,7 @@ func (s *server) SendSticker() http.HandlerFunc {
 		PackPublisher string
 		Emojis        []string
 		ContextInfo   waE2E.ContextInfo
+		QuotedMessage *waE2E.Message `json:"QuotedMessage,omitempty"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1528,10 +1566,22 @@ func (s *server) SendSticker() http.HandlerFunc {
 		}}
 
 		if t.ContextInfo.StanzaID != nil {
-			msg.StickerMessage.ContextInfo = &waE2E.ContextInfo{
-				StanzaID:      proto.String(*t.ContextInfo.StanzaID),
-				Participant:   proto.String(*t.ContextInfo.Participant),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
+			var qm *waE2E.Message
+
+			// If QuotedMessage was provided, use it.
+			if t.QuotedMessage != nil {
+				qm = t.QuotedMessage
+			} else {
+				// Otherwise, it uses the old logic (empty message).
+				qm = &waE2E.Message{Conversation: proto.String("")}
+			}
+
+			if msg.StickerMessage.ContextInfo == nil {
+				msg.StickerMessage.ContextInfo = &waE2E.ContextInfo{
+					StanzaID:      proto.String(*t.ContextInfo.StanzaID),
+					Participant:   proto.String(*t.ContextInfo.Participant),
+					QuotedMessage: qm,
+				}
 			}
 		}
 		if t.ContextInfo.MentionedJID != nil {
@@ -1581,6 +1631,7 @@ func (s *server) SendVideo() http.HandlerFunc {
 		JPEGThumbnail []byte
 		MimeType      string
 		ContextInfo   waE2E.ContextInfo
+		QuotedMessage *waE2E.Message `json:"QuotedMessage,omitempty"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1684,10 +1735,22 @@ func (s *server) SendVideo() http.HandlerFunc {
 		}}
 
 		if t.ContextInfo.StanzaID != nil {
-			msg.VideoMessage.ContextInfo = &waE2E.ContextInfo{
-				StanzaID:      proto.String(*t.ContextInfo.StanzaID),
-				Participant:   proto.String(*t.ContextInfo.Participant),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
+			var qm *waE2E.Message
+
+			// If QuotedMessage was provided, use it.
+			if t.QuotedMessage != nil {
+				qm = t.QuotedMessage
+			} else {
+				// Otherwise, it uses the old logic (empty message).
+				qm = &waE2E.Message{Conversation: proto.String("")}
+			}
+
+			if msg.VideoMessage.ContextInfo == nil {
+				msg.VideoMessage.ContextInfo = &waE2E.ContextInfo{
+					StanzaID:      proto.String(*t.ContextInfo.StanzaID),
+					Participant:   proto.String(*t.ContextInfo.Participant),
+					QuotedMessage: qm,
+				}
 			}
 		}
 		if t.ContextInfo.MentionedJID != nil {
@@ -1735,6 +1798,7 @@ func (s *server) SendContact() http.HandlerFunc {
 		Name        string
 		Vcard       string
 		ContextInfo waE2E.ContextInfo
+		QuotedMessage *waE2E.Message `json:"QuotedMessage,omitempty"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1788,10 +1852,22 @@ func (s *server) SendContact() http.HandlerFunc {
 		}}
 
 		if t.ContextInfo.StanzaID != nil {
-			msg.ContactMessage.ContextInfo = &waE2E.ContextInfo{
-				StanzaID:      proto.String(*t.ContextInfo.StanzaID),
-				Participant:   proto.String(*t.ContextInfo.Participant),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
+			var qm *waE2E.Message
+
+			// If QuotedMessage was provided, use it.
+			if t.QuotedMessage != nil {
+				qm = t.QuotedMessage
+			} else {
+				// Otherwise, it uses the old logic (empty message).
+				qm = &waE2E.Message{Conversation: proto.String("")}
+			}
+
+			if msg.ContactMessage.ContextInfo == nil {
+				msg.ContactMessage.ContextInfo = &waE2E.ContextInfo{
+					StanzaID:      proto.String(*t.ContextInfo.StanzaID),
+					Participant:   proto.String(*t.ContextInfo.Participant),
+					QuotedMessage: qm,
+				}
 			}
 		}
 		if t.ContextInfo.MentionedJID != nil {
@@ -1840,6 +1916,7 @@ func (s *server) SendLocation() http.HandlerFunc {
 		Latitude    float64
 		Longitude   float64
 		ContextInfo waE2E.ContextInfo
+		QuotedMessage *waE2E.Message `json:"QuotedMessage,omitempty"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1894,10 +1971,22 @@ func (s *server) SendLocation() http.HandlerFunc {
 		}}
 
 		if t.ContextInfo.StanzaID != nil {
-			msg.LocationMessage.ContextInfo = &waE2E.ContextInfo{
-				StanzaID:      proto.String(*t.ContextInfo.StanzaID),
-				Participant:   proto.String(*t.ContextInfo.Participant),
-				QuotedMessage: &waE2E.Message{Conversation: proto.String("")},
+			var qm *waE2E.Message
+
+			// If QuotedMessage was provided, use it.
+			if t.QuotedMessage != nil {
+				qm = t.QuotedMessage
+			} else {
+				// Otherwise, it uses the old logic (empty message).
+				qm = &waE2E.Message{Conversation: proto.String("")}
+			}
+
+			if msg.LocationMessage.ContextInfo == nil {
+				msg.LocationMessage.ContextInfo = &waE2E.ContextInfo{
+					StanzaID:      proto.String(*t.ContextInfo.StanzaID),
+					Participant:   proto.String(*t.ContextInfo.Participant),
+					QuotedMessage: qm,
+				}
 			}
 		}
 		if t.ContextInfo.MentionedJID != nil {
@@ -2246,28 +2335,23 @@ func (s *server) SetStatusMessage() http.HandlerFunc {
 
 // Sends a regular text message
 func (s *server) SendMessage() http.HandlerFunc {
-
 	type textStruct struct {
-		Phone       string
-		Body        string
-		LinkPreview bool
-		Id          string
-		ContextInfo waE2E.ContextInfo
-		QuotedText  string `json:"QuotedText,omitempty"`
+		Phone         string
+		Body          string
+		LinkPreview   bool
+		Id            string
+		ContextInfo   waE2E.ContextInfo
+		QuotedText    string          `json:"QuotedText,omitempty"`
+		QuotedMessage *waE2E.Message  `json:"QuotedMessage,omitempty"`
 	}
-
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		txtid := r.Context().Value("userinfo").(Values).Get("Id")
-
 		if clientManager.GetWhatsmeowClient(txtid) == nil {
 			s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
 			return
 		}
-
 		msgid := ""
 		var resp whatsmeow.SendResponse
-
 		decoder := json.NewDecoder(r.Body)
 		var t textStruct
 		err := decoder.Decode(&t)
@@ -2275,44 +2359,37 @@ func (s *server) SendMessage() http.HandlerFunc {
 			s.Respond(w, r, http.StatusBadRequest, errors.New("could not decode Payload"))
 			return
 		}
-
 		if t.Phone == "" {
 			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Phone in Payload"))
 			return
 		}
-
 		if t.Body == "" {
 			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Body in Payload"))
 			return
 		}
-
 		recipient, err := validateMessageFields(t.Phone, t.ContextInfo.StanzaID, t.ContextInfo.Participant)
 		if err != nil {
 			log.Error().Msg(fmt.Sprintf("%s", err))
 			s.Respond(w, r, http.StatusBadRequest, err)
 			return
 		}
-
 		if t.Id == "" {
 			msgid = clientManager.GetWhatsmeowClient(txtid).GenerateMessageID()
 		} else {
 			msgid = t.Id
 		}
-
 		var (
 			url         string
 			title       string
 			description string
 			imageData   []byte
 		)
-
 		if t.LinkPreview {
 			url = extractFirstURL(t.Body)
 			if url != "" {
 				title, description, imageData = getOpenGraphData(r.Context(), url, txtid)
 			}
 		}
-
 		msg := &waE2E.Message{
 			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
 				Text:          proto.String(t.Body),
@@ -2322,16 +2399,24 @@ func (s *server) SendMessage() http.HandlerFunc {
 				JPEGThumbnail: imageData,
 			},
 		}
-
 		if t.ContextInfo.StanzaID != nil {
-			qm := &waE2E.Message{}
-			if t.QuotedText != "" {
-				qm.ExtendedTextMessage = &waE2E.ExtendedTextMessage{
-					Text: proto.String(t.QuotedText),
-				}
+			var qm *waE2E.Message
+
+			// If QuotedMessage was provided, use it.
+			if t.QuotedMessage != nil {
+				qm = t.QuotedMessage
 			} else {
-				qm.Conversation = proto.String("")
+				// Otherwise, use the old logic with QuotedText.
+				qm = &waE2E.Message{}
+				if t.QuotedText != "" {
+					qm.ExtendedTextMessage = &waE2E.ExtendedTextMessage{
+						Text: proto.String(t.QuotedText),
+					}
+				} else {
+					qm.Conversation = proto.String("")
+				}
 			}
+
 			msg.ExtendedTextMessage.ContextInfo = &waE2E.ContextInfo{
 				StanzaID:      proto.String(*t.ContextInfo.StanzaID),
 				Participant:   proto.String(*t.ContextInfo.Participant),
@@ -2344,24 +2429,20 @@ func (s *server) SendMessage() http.HandlerFunc {
 			}
 			msg.ExtendedTextMessage.ContextInfo.MentionedJID = t.ContextInfo.MentionedJID
 		}
-
 		if t.ContextInfo.IsForwarded != nil && *t.ContextInfo.IsForwarded {
 			if msg.ExtendedTextMessage.ContextInfo == nil {
 				msg.ExtendedTextMessage.ContextInfo = &waE2E.ContextInfo{}
 			}
 			msg.ExtendedTextMessage.ContextInfo.IsForwarded = proto.Bool(true)
 		}
-
 		resp, err = clientManager.GetWhatsmeowClient(txtid).SendMessage(context.Background(), recipient, msg, whatsmeow.SendRequestExtra{ID: msgid})
 		if err != nil {
 			s.Respond(w, r, http.StatusInternalServerError, errors.New(fmt.Sprintf("error sending message: %v", err)))
 			return
 		}
-
 		historyStr := r.Context().Value("userinfo").(Values).Get("History")
 		historyLimit, _ := strconv.Atoi(historyStr)
 		s.saveOutgoingMessageToHistory(txtid, recipient.String(), msgid, "text", t.Body, "", historyLimit)
-
 		log.Info().Str("timestamp", fmt.Sprintf("%v", resp.Timestamp)).Str("id", msgid).Msg("Message sent")
 		response := map[string]interface{}{"Details": "Sent", "Timestamp": resp.Timestamp.Unix(), "Id": msgid}
 		responseJson, err := json.Marshal(response)
@@ -2370,7 +2451,6 @@ func (s *server) SendMessage() http.HandlerFunc {
 		} else {
 			s.Respond(w, r, http.StatusOK, string(responseJson))
 		}
-
 		return
 	}
 }
